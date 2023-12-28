@@ -7,7 +7,6 @@ TMDB_API_KEY = os.environ.get("TMDB_API_KEY")
 
 
 
-# API functions
 def get_query(search):
     url = f"https://api.themoviedb.org/3/search/movie?query={search}&api_key={TMDB_API_KEY}"
     return requests.get(url).json()
@@ -68,9 +67,15 @@ st.set_page_config(page_title = "Letterboxd CSV Generator", layout = "wide")
 # Sidebar
 st.sidebar.write("Title Language:")
 option_title_language = st.sidebar.radio("Title Language:", ("Original", "English"), label_visibility = "collapsed")
+st.sidebar.write("CSV:")
+option_id = st.sidebar.radio("ID:", ("TMDbID", "IMDbID"), label_visibility = "collapsed")
+option_title = st.sidebar.checkbox("Title")
+option_year = st.sidebar.checkbox("Year")
 st.sidebar.write("Review:")
 option_rating = st.sidebar.checkbox("Rating")
-option_review = st.sidebar.checkbox("Write a review")
+option_review = st.sidebar.checkbox("Review")
+
+
 
 # Title
 st.title("Letterboxd CSV Generator")
@@ -85,15 +90,14 @@ if input_search == "":
 elif search_query.get("total_results") == 0:
     st.error("Zero results!", icon = "🚨")
 else:
-    data = get_data_in_query(input_search)
 
-    # st.dataframe(data) # TODO: Delete later
+    search_data = get_data_in_query(input_search)
 
-    input_movie_id = st.selectbox(f"**{'Select Movie'}**:", data["id"], format_func = lambda x: movie_title_year(data, x, option_title_language))
+    input_movie_id = st.selectbox(f"**{'Select Movies'}**:", search_data["id"], format_func = lambda x: movie_title_year(search_data, x, option_title_language))
 
-    # New query for more details
+    # Movie information
+    # New query for more information
     movie_info = get_movie_information(input_movie_id)
-
 
     # Movie title
     if option_title_language == "Original":
@@ -111,9 +115,33 @@ else:
     col_2.write(f"**{'TMDb ID'}**: {input_movie_id}")
     col_2.write(f"**{'IMDb ID'}**: {movie_info['imdb_id']}")
 
-    # Initialize empty dataframe
-    if "letterboxd_df" not in st.session_state:
-        st.session_state["letterboxd_df"] = pd.DataFrame(columns = ["tmdbID"])
+    # Initialize variables to store values of multitple reruns
+    if "output_tmdb_ids" not in st.session_state:
+        st.session_state["output_tmdb_ids"] = set()
+    if "output_movie_reviews" not in st.session_state:
+        st.session_state["output_movie_reviews"] = dict()
 
-    st.write(st.session_state["letterboxd_df"])
+    # User review
+    if option_rating or option_review:
+        movie_review = st.form("movie_review", clear_on_submit = True, border = False)
+        movie_review.header("Movie Review")
+        if option_rating: 
+            input_movie_rating = movie_review.slider("Rating:", 1, 10, 5, 1)
+        else:
+            input_movie_rating = None
+        if option_review:
+            input_movie_review = movie_review.text_area("Review:")
+        else:
+            input_movie_review = None
+        if movie_review.form_submit_button("Add to CSV"):
+            st.session_state["output_tmdb_ids"].add(input_movie_id)
+            st.session_state["output_movie_reviews"][input_movie_id] = [input_movie_rating, input_movie_review]
+    else:
+        add_to_csv = st.button("Add to CSV")
+        if add_to_csv:
+            st.session_state["output_tmdb_ids"].add(input_movie_id)
+
+    st.header("CSV")
+    st.data_editor(pd.DataFrame(st.session_state["output_tmdb_ids"], columns = ["tmdbID"]))
+    st.write(st.session_state["output_movie_reviews"])
 
