@@ -36,6 +36,12 @@ def movie_title_year(df, id, language):
     year = df[df["id"] == id]["release_date"].item().split("-")[0]
     return title + " (" + year + ")"
 
+def movie_title(df):
+    if option_title_language == "Original":
+        return df["original_title"]
+    else:
+        return df["title"]
+
 def movie_genres(df):
     genres = [i.get("name") for i in df["genres"]]
     if len(genres) == 1:
@@ -59,6 +65,27 @@ def movie_release_date(df):
 def movie_average_rating(df):
     return str(round(df['vote_average']*10, 2)) + '%'
 
+def create_output_df():
+    output_tmdb_id = list(st.session_state["output_tmdb_id"].keys())
+    output_dict = {"tmdbID": output_tmdb_id}
+    if option_id == "IMDbID":
+        output_imdb_id = list(map(lambda x: st.session_state["output_tmdb_id"].get(x)["imdb_id"], output_tmdb_id))
+        output_dict["imdbID"] = output_imdb_id
+        output_dict.pop("tmdbID")
+    if option_title:
+        output_title = list(map(lambda x: movie_title(st.session_state["output_tmdb_id"].get(x)), output_tmdb_id))
+        output_dict["Title"] = output_title
+    if option_year:
+        output_year = list(map(lambda x: movie_release_date(st.session_state["output_tmdb_id"].get(x)).split("/")[-1], output_tmdb_id))
+        output_dict["Year"] = output_year
+    if option_rating:
+        output_rating = list(map(lambda x: st.session_state["output_reviews"].get(x)[0], output_tmdb_id))
+        output_dict["Rating10"] = output_rating
+    if option_review:
+        output_review = list(map(lambda x: st.session_state["output_reviews"].get(x)[1], output_tmdb_id))
+        output_dict["Review"] = output_review
+    return pd.DataFrame.from_dict(output_dict)
+
 
 
 # Page configuration
@@ -76,7 +103,6 @@ option_rating = st.sidebar.checkbox("Rating")
 option_review = st.sidebar.checkbox("Review")
 
 
-
 # Title
 st.title("Letterboxd CSV Generator")
 
@@ -85,14 +111,11 @@ input_search = st.text_input(f"**{'Search'}**:").replace(" ", "+") # TODO: Check
 search_query = get_query(input_search)
 
 # Search results
-if input_search == "":
-    st.error("Empty search!", icon = "🚨")
-elif search_query.get("total_results") == 0:
+if input_search != "" and search_query.get("total_results") == 0:
     st.error("Zero results!", icon = "🚨")
-else:
-
+elif input_search != "":
+    # Search input
     search_data = get_data_in_query(input_search)
-
     input_movie_id = st.selectbox(f"**{'Select Movies'}**:", search_data["id"], format_func = lambda x: movie_title_year(search_data, x, option_title_language))
 
     # Movie information
@@ -100,10 +123,7 @@ else:
     movie_info = get_movie_information(input_movie_id)
 
     # Movie title
-    if option_title_language == "Original":
-        st.header(movie_info["original_title"])
-    else:
-        st.header(movie_info["title"])
+    st.header(movie_title(movie_info))
     # Movie information
     col_1, col_2 = st.columns([1, 4])
     col_1.image(f"https://image.tmdb.org/t/p/original/{movie_info['poster_path']}")
@@ -116,10 +136,13 @@ else:
     col_2.write(f"**{'IMDb ID'}**: {movie_info['imdb_id']}")
 
     # Initialize variables to store values of multitple reruns
-    if "output_tmdb_ids" not in st.session_state:
-        st.session_state["output_tmdb_ids"] = set()
-    if "output_movie_reviews" not in st.session_state:
-        st.session_state["output_movie_reviews"] = dict()
+    if "output_tmdb_id" not in st.session_state:
+        st.session_state["output_tmdb_id"] = dict()
+    if "output_reviews" not in st.session_state:
+        st.session_state["output_reviews"] = dict()
+
+    # Subset of movie_info to be used in create_output_df()
+    movie_info_subset = {key: value for key, value in movie_info.items() if key in ("imdb_id", "original_title", "title", "release_date")}
 
     # User review
     if option_rating or option_review:
@@ -134,14 +157,14 @@ else:
         else:
             input_movie_review = None
         if movie_review.form_submit_button("Add to CSV"):
-            st.session_state["output_tmdb_ids"].add(input_movie_id)
-            st.session_state["output_movie_reviews"][input_movie_id] = [input_movie_rating, input_movie_review]
+            st.session_state["output_tmdb_id"][input_movie_id] = movie_info_subset
+            st.session_state["output_reviews"][input_movie_id] = [input_movie_rating, input_movie_review]
     else:
         add_to_csv = st.button("Add to CSV")
         if add_to_csv:
-            st.session_state["output_tmdb_ids"].add(input_movie_id)
+            st.session_state["output_tmdb_id"][input_movie_id] = movie_info_subset
 
-    st.header("CSV")
-    st.data_editor(pd.DataFrame(st.session_state["output_tmdb_ids"], columns = ["tmdbID"]))
-    st.write(st.session_state["output_movie_reviews"])
+# Output
+st.header("CSV")
+st.data_editor(create_output_df(), num_rows = "dynamic")
 
