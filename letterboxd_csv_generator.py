@@ -7,10 +7,12 @@ TMDB_API_KEY = os.environ.get("TMDB_API_KEY")
 
 
 
+@st.cache_data
 def get_query(search):
     url = f"https://api.themoviedb.org/3/search/movie?query={search}&api_key={TMDB_API_KEY}"
     return requests.get(url).json()
 
+@st.cache_data
 def get_data_in_query(search):
     data = []
     for i in range(1, get_query(search).get("total_pages") + 1):
@@ -23,10 +25,12 @@ def get_data_in_query(search):
     data.sort_values(by = ["popularity"], ascending = False, inplace = True)
     return data
 
+@st.cache_data
 def get_movie_information(movie_id):
     url = f"https://api.themoviedb.org/3/movie/{movie_id}?api_key={TMDB_API_KEY}"
     return requests.get(url).json()
 
+@st.cache_data
 def movie_title_year(df, id, language):
     # TODO: Handle when no release date
     if language == "Original":
@@ -36,12 +40,14 @@ def movie_title_year(df, id, language):
     year = df[df["id"] == id]["release_date"].item().split("-")[0]
     return title + " (" + year + ")"
 
+@st.cache_data
 def movie_title(df):
     if option_title_language == "Original":
         return df["original_title"]
     else:
         return df["title"]
 
+@st.cache_data
 def movie_genres(df):
     genres = [i.get("name") for i in df["genres"]]
     if len(genres) == 1:
@@ -52,18 +58,27 @@ def movie_genres(df):
         genres.append(last_two)
         return ", ".join(genres)
 
+@st.cache_data
 def movie_runtime(df):
     minutes = df["runtime"]
     hours = minutes // 60
     minutes -= hours * 60
     return str(hours) + "h " + str(minutes) + "m"
 
+@st.cache_data
 def movie_release_date(df):
     ymd = df["release_date"].split("-")
     return "/".join(ymd[::-1])
 
+@st.cache_data
 def movie_average_rating(df):
     return str(round(df['vote_average']*10, 2)) + '%'
+
+def movie_output_reviews(output_reviews, x):
+    if x in output_reviews.keys():
+        return output_reviews.get(x)
+    else:
+        return [None, None]
 
 def create_output_df():
     output_tmdb_id = list(st.session_state["output_tmdb_id"].keys())
@@ -79,12 +94,20 @@ def create_output_df():
         output_year = list(map(lambda x: movie_release_date(st.session_state["output_tmdb_id"].get(x)).split("/")[-1], output_tmdb_id))
         output_dict["Year"] = output_year
     if option_rating:
-        output_rating = list(map(lambda x: st.session_state["output_reviews"].get(x)[0], output_tmdb_id))
+        output_rating = list(map(lambda x: movie_output_reviews(st.session_state["output_reviews"], x)[0], output_tmdb_id))
         output_dict["Rating10"] = output_rating
     if option_review:
-        output_review = list(map(lambda x: st.session_state["output_reviews"].get(x)[1], output_tmdb_id))
+        output_review = list(map(lambda x: movie_output_reviews(st.session_state["output_reviews"], x)[1], output_tmdb_id))
         output_dict["Review"] = output_review
     return pd.DataFrame.from_dict(output_dict)
+
+
+
+# Initialize variables to store values of multitple reruns
+if "output_tmdb_id" not in st.session_state:
+    st.session_state["output_tmdb_id"] = dict()
+if "output_reviews" not in st.session_state:
+    st.session_state["output_reviews"] = dict()
 
 
 
@@ -92,8 +115,8 @@ def create_output_df():
 st.set_page_config(page_title = "Letterboxd CSV Generator", layout = "wide")
 
 # Sidebar
-st.sidebar.write("Title Language:")
-option_title_language = st.sidebar.radio("Title Language:", ("Original", "English"), label_visibility = "collapsed")
+st.sidebar.write("Search Title Language:")
+option_title_language = st.sidebar.radio("Search Title Language:", ("Original", "English"), label_visibility = "collapsed")
 st.sidebar.write("CSV:")
 option_id = st.sidebar.radio("ID:", ("TMDbID", "IMDbID"), label_visibility = "collapsed")
 option_title = st.sidebar.checkbox("Title")
@@ -134,12 +157,6 @@ elif input_search != "":
     col_2.write(f"**{'Average Rating'}**: {movie_average_rating(movie_info)}")
     col_2.write(f"**{'TMDb ID'}**: {input_movie_id}")
     col_2.write(f"**{'IMDb ID'}**: {movie_info['imdb_id']}")
-
-    # Initialize variables to store values of multitple reruns
-    if "output_tmdb_id" not in st.session_state:
-        st.session_state["output_tmdb_id"] = dict()
-    if "output_reviews" not in st.session_state:
-        st.session_state["output_reviews"] = dict()
 
     # Subset of movie_info to be used in create_output_df()
     movie_info_subset = {key: value for key, value in movie_info.items() if key in ("imdb_id", "original_title", "title", "release_date")}
