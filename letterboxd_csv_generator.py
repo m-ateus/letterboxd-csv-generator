@@ -1,12 +1,17 @@
-import os
+import streamlit as st
 import requests
 import pandas as pd
-import streamlit as st
 
-TMDB_API_KEY = os.environ.get("TMDB_API_KEY")
+# Local API KEY
+# import os
+# TMDB_API_KEY = os.environ.get("TMDB_API_KEY")
+
+# Cloud API KEY
+TMDB_API_KEY = st.secrets["TMDB_API_KEY"]
 
 
 
+# Functions
 @st.cache_data
 def get_query(search):
     url = f"https://api.themoviedb.org/3/search/movie?query={search}&api_key={TMDB_API_KEY}"
@@ -112,7 +117,7 @@ if "output_reviews" not in st.session_state:
 
 
 # Page configuration
-st.set_page_config(page_title = "Letterboxd CSV Generator", layout = "wide")
+st.set_page_config(page_title = "Letterboxd CSV Generator", page_icon = "🎥", layout = "wide")
 
 # Sidebar
 st.sidebar.write("Search Title Language:")
